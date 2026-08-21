@@ -11,7 +11,8 @@ from edit import EditPage
 
 class SelectPage(QWidget):
 
-    next_requested = Signal(str, list)
+    next_requested = Signal(str, object)
+    SLIT_WIDTH = 4
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -50,9 +51,9 @@ class SelectPage(QWidget):
     def print_file(self):
         if self.selected_file_path:
             filepath = self.selected_file_path
-            images = CreateImages(filepath, os.path.dirname(filepath), 150)
-            self.qimages = images.run()
-            self.next_requested.emit(filepath, self.qimages)
+            images = CreateImages(filepath, os.path.dirname(filepath), None, slit_width=self.SLIT_WIDTH)
+            self.stitched = images.run()
+            self.next_requested.emit(filepath, self.stitched)
 
 
 # PySide6のアプリ本体（ユーザがコーディングしていく部分）
@@ -76,16 +77,39 @@ class MainWindow(QWidget):
         layout.addWidget(self.stack)
 
         self.select = SelectPage()
-        self.edit = EditPage([])
+        self.edit = EditPage(None, slit_width=SelectPage.SLIT_WIDTH)
+        self.edit_page = self.build_edit_page()
 
-        for p in (self.select, self.edit):
+        for p in (self.select, self.edit_page):
             self.stack.addWidget(p)
 
         self.select.next_requested.connect(self.goto_edit)
 
-    def goto_edit(self, filepath, qimages):
-        self.edit.set_qimages(qimages)
-        self.stack.setCurrentWidget(self.edit)
+    def build_edit_page(self):
+        container = QWidget()
+        layout = QVBoxLayout(container)
+
+        controls = QVBoxLayout()
+        self.time_label = QLabel("経過時間: -- 秒（フレーム --）")
+        controls.addWidget(self.time_label)
+
+        self.set_start_button = QPushButton("この位置をスタートに設定")
+        self.set_start_button.clicked.connect(self.edit.set_start_here)
+        controls.addWidget(self.set_start_button)
+
+        layout.addLayout(controls)
+        layout.addWidget(self.edit)
+
+        self.edit.time_changed.connect(self.update_time_label)
+
+        return container
+
+    def update_time_label(self, seconds, frame):
+        self.time_label.setText(f"経過時間: {seconds:.3f} 秒（フレーム {frame}）")
+
+    def goto_edit(self, filepath, bgr):
+        self.edit.set_source(bgr)
+        self.stack.setCurrentWidget(self.edit_page)
 
 
 if __name__ == "__main__":
